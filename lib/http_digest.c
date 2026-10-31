@@ -166,8 +166,15 @@ CURLcode Curl_output_digest(struct Curl_easy *data,
   result = Curl_auth_create_digest_http_message(data, creds, request,
                                                 uripath, digest,
                                                 &response, &len);
-  if(result)
+  if(result) {
+    if(result == CURLE_FAILED_INIT)
+      /* the MD5 hash could not be set up: the crypto backend refuses MD5
+         (FIPS mode). Only MD5 based Digest gets here, SHA-256 Digest does
+         not use MD5. */
+      failf(data, "MD5 is not available (FIPS mode?), cannot use Digest "
+            "authentication");
     return result;
+  }
 
   *allocuserpwd = curl_maprintf("%sAuthorization: Digest %s\r\n",
                                 proxy ? "Proxy-" : "", response);

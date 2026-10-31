@@ -101,6 +101,13 @@ CURLcode Curl_auth_create_digest_md5_message(struct Curl_easy *data,
 CURLcode Curl_auth_decode_digest_http_message(const char *chlg,
                                               struct digestdata *digest);
 
+#ifndef USE_WINDOWS_SSPI
+/* TRUE when the decoded challenge selected an MD5 based algorithm (RFC 2617,
+   or RFC 7616 with algorithm=MD5 or MD5-sess). SHA-256 and SHA-512-256
+   Digest do not need MD5. Not for SSPI, where Windows does the hashing. */
+bool Curl_auth_digest_needs_md5(const struct digestdata *digest);
+#endif
+
 /* This is used to generate an HTTP DIGEST response message */
 CURLcode Curl_auth_create_digest_http_message(struct Curl_easy *data,
                                               struct Curl_creds *creds,

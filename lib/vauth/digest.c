@@ -978,6 +978,25 @@ oom:
 }
 
 /*
+ * Curl_auth_digest_needs_md5()
+ *
+ * Tell whether the algorithm selected by the decoded challenge is MD5 based.
+ * Lets the caller leave Digest out of an automatic method choice when the
+ * crypto backend refuses MD5 (FIPS mode), while SHA-256 and SHA-512-256
+ * Digest stay available.
+ *
+ * Parameters:
+ *
+ * digest  [in]     - The digest data struct holding the decoded challenge.
+ *
+ * Returns TRUE for MD5 and MD5-sess, FALSE otherwise.
+ */
+bool Curl_auth_digest_needs_md5(const struct digestdata *digest)
+{
+  return digest->algo <= ALGO_MD5SESS;
+}
+
+/*
  * Curl_auth_create_digest_http_message()
  *
  * This is used to generate an HTTP DIGEST response message ready for sending

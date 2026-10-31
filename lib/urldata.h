@@ -626,6 +626,8 @@ struct UrlState {
   BIT(allow_port); /* Is set.use_port allowed to take effect or not. This
                       is always set TRUE when curl_easy_perform() is called. */
   BIT(authproblem); /* TRUE if there is some problem authenticating */
+  BIT(md5_probed); /* md5_unavailable holds a probe result */
+  BIT(md5_unavailable); /* the crypto backend refuses MD5 (FIPS mode) */
   /* set after initial USER failure, to prevent an authentication loop */
   BIT(wildcardmatch); /* enable wildcard matching */
   BIT(disableexpect);    /* TRUE if Expect: is disabled due to a previous

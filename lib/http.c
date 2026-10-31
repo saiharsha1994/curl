@@ -56,6 +56,7 @@
 #include "curlx/base64.h"
 #include "cookie.h"
 #include "vauth/vauth.h"
+#include "curl_md5.h"
 #include "vquic/vquic.h"
 #include "http_digest.h"
 #include "http_negotiate.h"
@@ -326,19 +327,60 @@ fail:
 
 #endif
 
+#if !defined(CURL_DISABLE_DIGEST_AUTH) && !defined(USE_WINDOWS_SSPI)
+/* MD5 based Digest hashes with MD5. A crypto backend running in FIPS mode
+   refuses MD5. Probe it once per easy handle so pickoneauth() can leave such a
+   Digest out of an automatic choice. With Windows SSPI the hashing is done by
+   Windows and curl's MD5 is not involved. */
+static bool md5_is_available(struct Curl_easy *data)
+{
+  if(!data->state.md5_probed) {
+    unsigned char digest[16];
+    data->state.md5_probed = TRUE;
+    data->state.md5_unavailable =
+      Curl_md5it(digest, (const unsigned char *)"", 0) ? TRUE : FALSE;
+  }
+  return !data->state.md5_unavailable;
+}
+#endif
+
+/* pickoneauth() takes a pointer to the decoded Digest challenge. The struct is
+   only defined when Digest is built, the pointer is passed either way. */
+struct digestdata;
+
 /* pickoneauth() selects the most favorable authentication method from the
  * ones available and the ones we want.
  *
  * return TRUE if one was picked
  */
-static bool pickoneauth(struct auth *pick, unsigned long mask,
-                        struct Curl_creds *creds)
+static bool pickoneauth(struct Curl_easy *data, struct auth *pick,
+                        unsigned long mask, struct Curl_creds *creds,
+                        const struct digestdata *digest)
 {
   bool have_user_pass = Curl_creds_has_user_or_pass(creds);
   bool picked;
   /* only deal with authentication we want */
   unsigned long avail = pick->avail & pick->want & mask;
   picked = TRUE;
+
+#if !defined(CURL_DISABLE_DIGEST_AUTH) && !defined(USE_WINDOWS_SSPI)
+  /* Digest needs MD5 when the challenge selected an MD5 algorithm; SHA-256
+     Digest does not. When the crypto backend refuses MD5 (FIPS mode) and curl
+     is choosing among several methods (CURLAUTH_ANY), do not try an MD5
+     Digest: whatever else the challenge offered is picked by the usual order
+     below, and if nothing is left no method is picked. A single method the
+     user asked for is still tried, so that it fails with an error naming MD5
+     rather than silently doing nothing. */
+  if((avail & CURLAUTH_DIGEST) && (pick->want & ~CURLAUTH_DIGEST) &&
+     digest && Curl_auth_digest_needs_md5(digest) &&
+     !md5_is_available(data)) {
+    infof(data, "MD5 is not available (FIPS mode?), not using Digest");
+    avail &= ~CURLAUTH_DIGEST;
+  }
+#else
+  (void)data;
+  (void)digest;
+#endif
 
   /* The order of these checks is highly relevant, as this will be the order
      of preference in case of the existence of multiple accepted types. */
@@ -544,7 +586,13 @@ CURLcode Curl_http_auth_act(struct Curl_easy *data)
   if(data->state.creds &&
      ((data->req.httpcode == 401) ||
       (data->req.authneg && data->req.httpcode < 300))) {
-    pickhost = pickoneauth(&data->state.authhost, authmask, data->state.creds);
+#ifndef CURL_DISABLE_DIGEST_AUTH
+    pickhost = pickoneauth(data, &data->state.authhost, authmask,
+                           data->state.creds, &data->state.digest);
+#else
+    pickhost = pickoneauth(data, &data->state.authhost, authmask,
+                           data->state.creds, NULL);
+#endif
     if(!pickhost)
       data->state.authproblem = TRUE;
     else
@@ -554,9 +602,16 @@ CURLcode Curl_http_auth_act(struct Curl_easy *data)
   if(conn->http_proxy.creds &&
      ((data->req.httpcode == 407) ||
       (data->req.authneg && data->req.httpcode < 300))) {
-    pickproxy = pickoneauth(&data->state.authproxy,
+#ifndef CURL_DISABLE_DIGEST_AUTH
+    pickproxy = pickoneauth(data, &data->state.authproxy,
                             authmask & ~CURLAUTH_BEARER,
-                            conn->http_proxy.creds);
+                            conn->http_proxy.creds,
+                            &data->state.proxydigest);
+#else
+    pickproxy = pickoneauth(data, &data->state.authproxy,
+                            authmask & ~CURLAUTH_BEARER,
+                            conn->http_proxy.creds, NULL);
+#endif
     if(!pickproxy)
       data->state.authproblem = TRUE;
     else
