@@ -167,12 +167,14 @@ CURLcode Curl_output_digest(struct Curl_easy *data,
                                                 uripath, digest,
                                                 &response, &len);
   if(result) {
-    if(result == CURLE_FAILED_INIT)
-      /* the MD5 hash could not be set up: the crypto backend refuses MD5
-         (FIPS mode). Only MD5 based Digest gets here, SHA-256 Digest does
-         not use MD5. */
+#ifndef USE_WINDOWS_SSPI
+    /* the hash could not be set up. For an MD5 based Digest that means the
+       crypto backend refuses MD5 (FIPS mode); say so, since the generic
+       "Failed initialization" names neither MD5 nor FIPS. */
+    if(result == CURLE_FAILED_INIT && Curl_auth_digest_needs_md5(digest))
       failf(data, "MD5 is not available (FIPS mode?), cannot use Digest "
             "authentication");
+#endif
     return result;
   }
 

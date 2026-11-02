@@ -370,8 +370,10 @@ static bool pickoneauth(struct Curl_easy *data, struct auth *pick,
      Digest: whatever else the challenge offered is picked by the usual order
      below, and if nothing is left no method is picked. A single method the
      user asked for is still tried, so that it fails with an error naming MD5
-     rather than silently doing nothing. */
-  if((avail & CURLAUTH_DIGEST) && (pick->want & ~CURLAUTH_DIGEST) &&
+     rather than silently doing nothing. CURLAUTH_ONLY is a flag, not a
+     method, so it does not count as a second method here. */
+  if((avail & CURLAUTH_DIGEST) &&
+     (pick->want & ~(CURLAUTH_DIGEST | CURLAUTH_ONLY)) &&
      digest && Curl_auth_digest_needs_md5(digest) &&
      !md5_is_available(data)) {
     infof(data, "MD5 is not available (FIPS mode?), not using Digest");
